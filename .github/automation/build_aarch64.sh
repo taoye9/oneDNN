@@ -36,16 +36,28 @@ if [[ "$OS" == "Darwin" ]]; then
     ONEDNN_THREADING=SEQ
 fi
 
-set -x
-cmake \
-    -Bbuild -S. \
+CMAKE_OPTIONS="-Bbuild -S. \
     -DDNNL_AARCH64_USE_ACL=ON \
     -DONEDNN_BUILD_GRAPH=0 \
-    -DDNNL_CPU_RUNTIME=$ONEDNN_THREADING \
     -DONEDNN_WERROR=ON \
     -DDNNL_BUILD_FOR_CI=ON \
-    -DONEDNN_TEST_SET=$ONEDNN_TEST_SET \
-    -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
+    -DONEDNN_TEST_SET=${ONEDNN_TEST_SET} \
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+"
+
+if [[ "$SCHEDULER" == 'TP' ]]; then
+  EIGEN_INSTALL_PATH=${EIGEN_INSTALL_PATH:-"$PWD"}
+  CMAKE_OPTIONS="${CMAKE_OPTIONS} -DDNNL_CPU_RUNTIME=THREADPOOL \
+      -D_DNNL_TEST_THREADPOOL_IMPL=EIGEN -DEigen3_DIR=${EIGEN_INSTALL_PATH}/share/eigen3/cmake"
+elif [[ "$SCHEDULER" == "OMP" ]]; then
+  CMAKE_OPTIONS="${CMAKE_OPTIONS} -DDNNL_CPU_RUNTIME=OMP"
+else
+  echo "Only OMP and TP schedulers supported, $SCHEDULER requested"
+  exit 1
+fi
+
+set -x
+cmake ${CMAKE_OPTIONS}
 
 cmake --build build $MP
 set +x

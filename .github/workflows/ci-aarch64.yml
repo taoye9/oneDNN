@@ -34,58 +34,57 @@ concurrency:
 permissions: read-all
 
 jobs:
-  macos:
-    name: macOS
-    runs-on: macos-14
-    strategy:
-      matrix:
-        toolset: [clang, gcc]
-        config: [Debug, Release]
+  # macos:
+  #   name: macOS
+  #   runs-on: macos-14
+  #   strategy:
+  #     matrix:
+  #       toolset: [clang, gcc]
+  #       config: [Debug, Release]
 
-    steps:
-      - name: Checkout oneDNN
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
-        with:
-          path: oneDNN
+  #   steps:
+  #     - name: Checkout oneDNN
+  #       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+  #       with:
+  #         path: oneDNN
 
-      - name: Install Scons
-        uses: threeal/pipx-install-action@b0bf0add7d5aefda03a3d4e47d651df807889e10 # v1.0.0
-        with:
-          packages: scons
+  #     - name: Install Scons
+  #       uses: threeal/pipx-install-action@b0bf0add7d5aefda03a3d4e47d651df807889e10 # v1.0.0
+  #       with:
+  #         packages: scons
 
-      - name: Build ACL
-        run: ${{ github.workspace }}/oneDNN/.github/automation/build_acl.sh
-        env:
-          ACL_ROOT_DIR: ${{ github.workspace }}/ComputeLibrary
-          BUILD_TOOLSET: ${{ matrix.toolset }}
-          ACL_CONFIG: ${{ matrix.config }}
-          GCC_VERSION: 14
+  #     - name: Build ACL
+  #       run: ${{ github.workspace }}/oneDNN/.github/automation/build_acl.sh
+  #       env:
+  #         ACL_ROOT_DIR: ${{ github.workspace }}/ComputeLibrary
+  #         BUILD_TOOLSET: ${{ matrix.toolset }}
+  #         ACL_CONFIG: ${{ matrix.config }}
+  #         GCC_VERSION: 14
 
-      - name: Build oneDNN
-        run: ${{ github.workspace }}/oneDNN/.github/automation/build_aarch64.sh
-        working-directory: ${{ github.workspace }}/oneDNN
-        env:
-          ACL_ROOT_DIR: ${{ github.workspace }}/ComputeLibrary
-          BUILD_TOOLSET: ${{ matrix.toolset }}
-          CMAKE_BUILD_TYPE: ${{ matrix.config }}
-          GCC_VERSION: 14
+  #     - name: Build oneDNN
+  #       run: ${{ github.workspace }}/oneDNN/.github/automation/build_aarch64.sh
+  #       working-directory: ${{ github.workspace }}/oneDNN
+  #       env:
+  #         ACL_ROOT_DIR: ${{ github.workspace }}/ComputeLibrary
+  #         BUILD_TOOLSET: ${{ matrix.toolset }}
+  #         CMAKE_BUILD_TYPE: ${{ matrix.config }}
+  #         GCC_VERSION: 14
 
-      - if: matrix.toolset == 'clang'
-        name: Run oneDNN smoke tests
-        run: ${{ github.workspace }}/oneDNN/.github/automation/test_aarch64.sh
-        working-directory: ${{ github.workspace }}/oneDNN/build
-        env:
-          CMAKE_BUILD_TYPE: ${{ matrix.config }}
-          DYLD_LIBRARY_PATH: ${{ github.workspace }}/ComputeLibrary/build
-
+  #     - name: Run oneDNN smoke tests
+  #       run: ${{ github.workspace }}/oneDNN/.github/automation/test_aarch64.sh
+  #       working-directory: ${{ github.workspace }}/oneDNN/build
+  #       env:
+  #         CMAKE_BUILD_TYPE: ${{ matrix.config }}
+  #         DYLD_LIBRARY_PATH: ${{ github.workspace }}/ComputeLibrary/build
+    
   # We only run the linux aarch64 runners if macos smoke tests pass.
-  linux:
-    needs: macos
+  linux-TP:
+    # needs: macos
     strategy:
       matrix:
-        threading: [OMP]
-        toolset: [clang, gcc]
-        config: [Debug, Release]
+        threading: [TP]
+        toolset: [clang]
+        config: [Release]
         host: [
           { name: c6g, label: ah-ubuntu_22_04-c6g_2x-50 }, 
           { name: c7g, label: ah-ubuntu_22_04-c7g_2x-50 }
@@ -104,6 +103,16 @@ jobs:
           sudo apt update -y
           sudo apt install -y scons cmake make
 
+      - if: matrix.threading == 'TP'
+        name: Install eigen3
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone https://gitlab.com/libeigen/eigen.git --depth 1
+          cd eigen
+          git checkout aa6964bf3a34fd607837dd8123bc42465185c4f8
+          cd ..
+          ${{ github.workspace }}/oneDNN/.github/automation/build-eigen-headers.sh
+      
       - if: matrix.threading == 'OMP'
         name: Install openmp
         run: |
@@ -140,6 +149,7 @@ jobs:
           CMAKE_BUILD_TYPE: ${{ matrix.config }}
           GCC_VERSION: 13
           ONEDNN_THREADING: ${{ matrix.threading }}
+          EIGEN_INSTALL_PATH: ${{ github.workspace }}
 
       - name: Run oneDNN tests
         run: ${{ github.workspace }}/oneDNN/.github/automation/test_aarch64.sh
@@ -149,3 +159,75 @@ jobs:
           CMAKE_BUILD_TYPE: ${{ matrix.config }}
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/ComputeLibrary/build
           ONEDNN_THREADING: ${{ matrix.threading }}     
+ 
+  # # We only run the linux aarch64 runners if macos smoke tests pass.
+  # linux-OMP:
+  #   needs: macos
+  #   strategy:
+  #     matrix:
+  #       threading: [SEQ, OMP]
+  #       toolset: [clang, gcc]
+  #       config: [Debug, Release]
+  #       host: [
+  #         { name: c6g, label: ah-ubuntu_22_04-c6g_2x-50 }, 
+  #         { name: c7g, label: ah-ubuntu_22_04-c7g_2x-50 }
+  #       ]
+
+  #   name: ${{ matrix.host.name }}, ${{ matrix.toolset }}, ${{ matrix.threading }}, ${{ matrix.config }}
+  #   runs-on: ${{ matrix.host.label }}
+  #   steps:
+  #     - name: Checkout oneDNN
+  #       uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.2.0
+  #       with:
+  #         path: oneDNN
+
+  #     - name: Install dev tools
+  #       run: |
+  #         sudo apt update -y
+  #         sudo apt install -y scons cmake make
+
+  #     - if: matrix.threading == 'OMP'
+  #       name: Install openmp
+  #       run: |
+  #         sudo apt install -y libomp-dev
+
+  #     - if: matrix.toolset == 'gcc'
+  #       name: Install gcc
+  #       run: |
+  #         sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+  #         sudo apt update -y
+  #         sudo apt install -y g++-13
+
+  #     - if: matrix.toolset == 'clang'
+  #       name: Install clang
+  #       uses: KyleMayes/install-llvm-action@e0a8dc9cb8a22e8a7696e8a91a4e9581bec13181
+  #       with:
+  #         version: "17"
+
+  #     - name: Build ACL
+  #       run: ${{ github.workspace }}/oneDNN/.github/automation/build_acl.sh
+  #       env:
+  #         ACL_CONFIG: ${{ matrix.config }}
+  #         ACL_ROOT_DIR: ${{ github.workspace }}/ComputeLibrary
+  #         BUILD_TOOLSET: ${{ matrix.toolset }}
+  #         GCC_VERSION: 13
+  #         ACL_THREADING: ${{ matrix.threading }}
+
+  #     - name: Build oneDNN
+  #       run: ${{ github.workspace }}/oneDNN/.github/automation/build_aarch64.sh
+  #       working-directory: ${{ github.workspace }}/oneDNN
+  #       env:
+  #         ACL_ROOT_DIR: ${{ github.workspace }}/ComputeLibrary
+  #         BUILD_TOOLSET: ${{ matrix.toolset }}
+  #         CMAKE_BUILD_TYPE: ${{ matrix.config }}
+  #         GCC_VERSION: 13
+  #         ONEDNN_THREADING: ${{ matrix.threading }}
+
+  #     - name: Run oneDNN tests
+  #       run: ${{ github.workspace }}/oneDNN/.github/automation/test_aarch64.sh
+  #       working-directory: ${{ github.workspace }}/oneDNN/build
+  #       env:
+  #         BUILD_TOOLSET: ${{ matrix.toolset }}
+  #         CMAKE_BUILD_TYPE: ${{ matrix.config }}
+  #         DYLD_LIBRARY_PATH: ${{ github.workspace }}/ComputeLibrary/build
+  #         ONEDNN_THREADING: ${{ matrix.threading }}     
